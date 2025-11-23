@@ -37,4 +37,18 @@ export PX4_PARAM_BRIDGE_LIB=/home/j10pr/ros2_ws/src/mav_inject/mav_inject/build/
 ros2 run mav_inject injection_test --ros-args -p px4_build_path:=/home/j10pr/Documents/PX4-Autopilot;
 exec bash'
 
+# Wait for user to confirm mav_inject is running
+echo ""
+echo "Waiting for mav_inject to finish starting up..."
+echo "Press ENTER when the mav_inject terminal shows it is ready"
+read -r
+
+# 6. Build and run the ROS2 Interpolation Movement Test
+echo "Building and running ROS2 Interpolation Movement Test..."
+gnome-terminal -- bash -c '
+cd /home/j10pr/ros2_ws && \
+colcon build --packages-select drone_api && \
+source install/setup.bash && \
+ros2 run drone_api test_demo'
+
 echo "All terminals launched!"

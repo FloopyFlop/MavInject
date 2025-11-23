@@ -249,20 +249,32 @@ class PX4ConfigInjector(Node):
                         -1
                     )
 
-                    # Wait for response
-                    msg = self.mav.recv_match(type='PARAM_VALUE', blocking=True, timeout=2)
-                    if msg:
-                        # Handle both bytes and str for param_id (different pymavlink versions)
-                        param_id = msg.param_id
-                        if isinstance(param_id, bytes):
-                            param_id = param_id.decode('utf-8').rstrip('\x00')
-                        elif isinstance(param_id, str):
-                            param_id = param_id.rstrip('\x00')
+                    # Wait for response - keep reading until we get the right parameter
+                    start_time = time.time()
+                    timeout = 2.0
+                    found = False
 
-                        param_value = msg.param_value
-                        self.get_logger().info(f'  CURRENT VALUE: {param_id} = {param_value}')
-                        self.get_logger().info(f'  Type: {msg.param_type}, Index: {msg.param_index}/{msg.param_count}')
-                    else:
+                    while (time.time() - start_time) < timeout:
+                        msg = self.mav.recv_match(type='PARAM_VALUE', blocking=True, timeout=0.5)
+                        if msg:
+                            # Handle both bytes and str for param_id (different pymavlink versions)
+                            param_id = msg.param_id
+                            if isinstance(param_id, bytes):
+                                param_id = param_id.decode('utf-8').rstrip('\x00')
+                            elif isinstance(param_id, str):
+                                param_id = param_id.rstrip('\x00')
+
+                            # Check if this is the parameter we requested
+                            if param_id == param_name:
+                                param_value = msg.param_value
+                                self.get_logger().info(f'  CURRENT VALUE: {param_id} = {param_value}')
+                                self.get_logger().info(f'  Type: {msg.param_type}, Index: {msg.param_index}/{msg.param_count}')
+                                found = True
+                                break
+                            else:
+                                self.get_logger().debug(f'  Skipping unexpected param: {param_id} (waiting for {param_name})')
+
+                    if not found:
                         self.get_logger().warning(f'  No response for parameter {param_name}')
 
                 except Exception as e:
@@ -322,24 +334,35 @@ class PX4ConfigInjector(Node):
                         mavutil.mavlink.MAV_PARAM_TYPE_REAL32
                     )
 
-                    # Wait for ACK
+                    # Wait for ACK - keep reading until we get the right parameter
                     self.get_logger().info(f'  Waiting for acknowledgment...')
-                    msg = self.mav.recv_match(type='PARAM_VALUE', blocking=True, timeout=2)
+                    start_time = time.time()
+                    timeout = 2.0
+                    found = False
 
-                    if msg:
-                        # Handle both bytes and str for param_id (different pymavlink versions)
-                        param_id = msg.param_id
-                        if isinstance(param_id, bytes):
-                            param_id = param_id.decode('utf-8').rstrip('\x00')
-                        elif isinstance(param_id, str):
-                            param_id = param_id.rstrip('\x00')
+                    while (time.time() - start_time) < timeout:
+                        msg = self.mav.recv_match(type='PARAM_VALUE', blocking=True, timeout=0.5)
+                        if msg:
+                            # Handle both bytes and str for param_id (different pymavlink versions)
+                            param_id = msg.param_id
+                            if isinstance(param_id, bytes):
+                                param_id = param_id.decode('utf-8').rstrip('\x00')
+                            elif isinstance(param_id, str):
+                                param_id = param_id.rstrip('\x00')
 
-                        new_value = msg.param_value
-                        self.get_logger().info(f'  SUCCESS: {param_id} confirmed at {new_value}')
+                            # Check if this is the parameter we set
+                            if param_id == param_name:
+                                new_value = msg.param_value
+                                self.get_logger().info(f'  SUCCESS: {param_id} confirmed at {new_value}')
 
-                        if abs(new_value - param_value) > 0.001:
-                            self.get_logger().warning(f'  WARNING: Set value {param_value} differs from confirmed {new_value}')
-                    else:
+                                if abs(new_value - param_value) > 0.001:
+                                    self.get_logger().warning(f'  WARNING: Set value {param_value} differs from confirmed {new_value}')
+                                found = True
+                                break
+                            else:
+                                self.get_logger().debug(f'  Skipping unexpected param: {param_id} (waiting for {param_name})')
+
+                    if not found:
                         self.get_logger().warning(f'  No acknowledgment received for {param_name}')
 
                 except Exception as e:
