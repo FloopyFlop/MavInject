@@ -24,6 +24,7 @@ setup(
         'console_scripts': [
             'injection_test = mav_inject.injection_test:main',
             'config_controller = mav_inject.config_controller:main',
+            'param_lister = mav_inject.param_lister:main',
         ],
     },
 )

@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
+# MAV_INJECT Environment Setup Script
+#
+# Usage:
+#   ./RunEnv.sh                 # Normal startup
+#   ./RunEnv.sh --list-params   # Startup + dump all PX4 parameters to JSON file
+#
 set -e
+
+# Check for optional --list-params flag
+LIST_PARAMS=false
+if [[ "$1" == "--list-params" ]]; then
+    LIST_PARAMS=true
+    echo "Will list all parameters after starting PX4..."
+fi
 
 # 1. Replace contents of mav_inject with files from /media/sf_VM-Shared
 SRC_DIR="/media/sf_VM-Shared"
@@ -26,6 +39,24 @@ echo ""
 echo "Waiting for PX4 SITL and MAVProxy to finish starting up..."
 echo "Press ENTER when both terminals show they are ready"
 read -r
+
+# Optional: List all parameters if --list-params flag was provided
+if [ "$LIST_PARAMS" = true ]; then
+    echo ""
+    echo "Listing all PX4 parameters..."
+    cd /home/j10pr/ros2_ws
+    colcon build --packages-select mav_inject
+    source install/setup.bash
+
+    OUTPUT_FILE="/home/j10pr/px4_parameters_$(date +%Y%m%d_%H%M%S).json"
+    echo "Fetching parameters and saving to: $OUTPUT_FILE"
+    ros2 run mav_inject param_lister --connection udp:127.0.0.1:14550 --output "$OUTPUT_FILE"
+
+    echo ""
+    echo "Parameters saved! You can view them at: $OUTPUT_FILE"
+    echo "Press ENTER to continue to mav_inject..."
+    read -r
+fi
 
 # 5. Build and run mav_inject in a third terminal
 echo "Building and running mav_inject..."
