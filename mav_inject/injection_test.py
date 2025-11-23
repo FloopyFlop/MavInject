@@ -170,71 +170,73 @@ class PX4ConfigInjector(Node):
         ])
         time.sleep(0.5)
 
-        # Test 2: Severely Reduce Rate Gains (Very Sluggish, Unstable)
+        # Test 2: INVERTED CONTROLS - Roll responds backwards
         self.get_logger().info('')
-        self.get_logger().info('--- Test 2: SABOTAGE - Severely Reduce Rate Gains ---')
+        self.get_logger().info('--- Test 2: SABOTAGE - INVERT ROLL CONTROL (WILL FLIP!) ---')
         self.set_parameters({
-            'MC_ROLLRATE_P': 0.01,
-            'MC_PITCHRATE_P': 0.01,
-            'MC_YAWRATE_P': 0.05
+            'MC_ROLL_P': -7.0,           # NEGATIVE = INVERTED!
+            'MC_ROLLRATE_P': -0.15,      # NEGATIVE = INVERTED!
         })
         time.sleep(0.5)
 
-        # Test 3: Extreme Asymmetric Roll/Pitch (Causes Heavy Drift)
+        # Test 3: INVERTED PITCH CONTROL
         self.get_logger().info('')
-        self.get_logger().info('--- Test 3: SABOTAGE - Extreme Asymmetric Control ---')
+        self.get_logger().info('--- Test 3: SABOTAGE - INVERT PITCH CONTROL (WILL FLIP!) ---')
         self.set_parameters({
-            'MC_ROLL_P': 15.0,
-            'MC_PITCH_P': 2.0
+            'MC_PITCH_P': -7.0,          # NEGATIVE = INVERTED!
+            'MC_PITCHRATE_P': -0.15,     # NEGATIVE = INVERTED!
         })
         time.sleep(0.5)
 
-        # Test 4: Destroy Position Control
+        # Test 4: EXTREME OSCILLATION - Massive I gain, zero D
         self.get_logger().info('')
-        self.get_logger().info('--- Test 4: SABOTAGE - Destroy Position Control ---')
+        self.get_logger().info('--- Test 4: SABOTAGE - EXTREME OSCILLATION (WILL SHAKE VIOLENTLY!) ---')
         self.set_parameters({
-            'MPC_XY_P': 0.1,
-            'MPC_Z_P': 0.1,
-            'MPC_XY_VEL_P_ACC': 0.5,
-            'MPC_Z_VEL_P_ACC': 0.5
+            'MC_ROLLRATE_I': 5.0,        # 25x normal! Massive windup
+            'MC_PITCHRATE_I': 5.0,       # 25x normal! Massive windup
+            'MC_ROLLRATE_D': 0.0,        # No damping
+            'MC_PITCHRATE_D': 0.0,       # No damping
         })
         time.sleep(0.5)
 
-        # Test 5: Extreme Rate I Terms (Causes Oscillation)
+        # Test 5: ZERO ALTITUDE CONTROL - Drone will drop
         self.get_logger().info('')
-        self.get_logger().info('--- Test 5: SABOTAGE - Excessive Integral Gains ---')
+        self.get_logger().info('--- Test 5: SABOTAGE - DISABLE ALTITUDE CONTROL (WILL DROP!) ---')
         self.set_parameters({
-            'MC_ROLLRATE_I': 0.5,
-            'MC_PITCHRATE_I': 0.5
+            'MPC_Z_P': 0.0,              # No altitude control!
+            'MPC_Z_VEL_P_ACC': 0.0,      # No vertical velocity control!
+            'MPC_THR_HOVER': 0.3,        # Low hover throttle = drop
         })
         time.sleep(0.5)
 
-        # Test 6: Reduce D Terms to Zero (No Damping)
+        # Test 6: INVERTED YAW + MAX RATE
         self.get_logger().info('')
-        self.get_logger().info('--- Test 6: SABOTAGE - Remove Damping ---')
+        self.get_logger().info('--- Test 6: SABOTAGE - INVERTED YAW (WILL SPIN!) ---')
         self.set_parameters({
-            'MC_ROLLRATE_D': 0.0,
-            'MC_PITCHRATE_D': 0.0
+            'MC_YAWRATE_P': -0.2,        # NEGATIVE = INVERTED!
+            'MC_YAW_P': -2.8,            # NEGATIVE = INVERTED!
+            'MC_YAWRATE_MAX': 400.0,     # 2x normal max rate = FAST SPIN
         })
         time.sleep(0.5)
 
         # Test 7: Read Parameters After Changes
         self.get_logger().info('')
-        self.get_logger().info('--- Test 7: Verify All Sabotaged Parameters ---')
+        self.get_logger().info('--- Test 7: Verify All CATASTROPHIC Sabotaged Parameters ---')
         self.read_parameters([
-            'MC_ROLL_P',
-            'MC_PITCH_P',
-            'MC_ROLLRATE_P',
-            'MC_PITCHRATE_P',
-            'MC_YAWRATE_P',
-            'MC_ROLLRATE_I',
-            'MC_PITCHRATE_I',
-            'MC_ROLLRATE_D',
-            'MC_PITCHRATE_D',
-            'MPC_XY_P',
-            'MPC_Z_P',
-            'MPC_XY_VEL_P_ACC',
-            'MPC_Z_VEL_P_ACC'
+            'MC_ROLL_P',           # Should be NEGATIVE (inverted!)
+            'MC_PITCH_P',          # Should be NEGATIVE (inverted!)
+            'MC_ROLLRATE_P',       # Should be NEGATIVE (inverted!)
+            'MC_PITCHRATE_P',      # Should be NEGATIVE (inverted!)
+            'MC_YAW_P',            # Should be NEGATIVE (inverted!)
+            'MC_YAWRATE_P',        # Should be NEGATIVE (inverted!)
+            'MC_ROLLRATE_I',       # Should be 5.0 (huge!)
+            'MC_PITCHRATE_I',      # Should be 5.0 (huge!)
+            'MC_ROLLRATE_D',       # Should be 0.0 (no damping)
+            'MC_PITCHRATE_D',      # Should be 0.0 (no damping)
+            'MC_YAWRATE_MAX',      # Should be 400.0 (fast spin)
+            'MPC_Z_P',             # Should be 0.0 (no altitude control)
+            'MPC_Z_VEL_P_ACC',     # Should be 0.0 (no velocity control)
+            'MPC_THR_HOVER',       # Should be 0.3 (low = will drop)
         ])
 
         self.get_logger().info('')
