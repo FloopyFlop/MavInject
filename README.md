@@ -40,7 +40,15 @@ MavInject/
    git pull origin main
    ```
 
-2. Build the package:
+2. Build the PX4 Parameter Bridge C library (for direct parameter access):
+   ```bash
+   cd /path/to/MavInject
+   ./build_bridge.sh /path/to/PX4-Autopilot
+   ```
+
+   This will create `libpx4_param_bridge.so` (or `.dylib` on macOS) that provides direct C API access to PX4's parameter system.
+
+3. Build the ROS2 package:
    ```bash
    cd /path/to/your/ros2_workspace
    colcon build --packages-select mav_inject
@@ -114,7 +122,51 @@ ros2 topic pub /px4_injector/command std_msgs/String "data: '{\"action\": \"back
 1. Develop code locally on macOS
 2. Push changes to git repository
 3. Pull on VM with ROS2 Kilted and PX4 simulator
-4. Build and test with simulator
+4. Build the C bridge library with `./build_bridge.sh`
+5. Build and test with simulator
+
+## Architecture: Direct C API Access
+
+MAV_INJECT uses **direct C API access** to PX4's parameter system, bypassing the MAVLink protocol entirely. This is the **lowest possible level** of parameter access.
+
+### How It Works
+
+1. **C Bridge Library** (`px4_param_bridge.c`):
+   - Small C shared library that wraps PX4's `param_set()` and `param_get()` functions
+   - Links directly against PX4's parameter system
+   - Provides simple C interface callable from Python
+
+2. **Python ctypes Wrapper** (`px4_param_api.py`):
+   - Loads the C bridge library using ctypes
+   - Provides Python methods that call C functions directly
+   - No network overhead, no protocol encoding/decoding
+
+3. **ROS2 Node** (`injection_test.py`):
+   - Uses the Python API to read/write parameters
+   - Automatic fallback to MAVLink if C API unavailable
+   - Extensive logging of all operations
+
+### Access Levels (from lowest to highest)
+
+1. **Direct C API** (Current implementation): Calls `param_set()`/`param_get()` directly
+2. **MAVLink Shell**: Execute shell commands via MAVLink
+3. **MAVLink Parameter Protocol**: Standard PARAM_SET/PARAM_VALUE messages
+4. **QGroundControl/GUI**: User interface tools
+
+### Building the C Bridge
+
+```bash
+# Set PX4 directory and build
+cd /path/to/MavInject
+./build_bridge.sh /path/to/PX4-Autopilot
+
+# The library will be created at:
+# mav_inject/build/libpx4_param_bridge.so (Linux)
+# mav_inject/build/libpx4_param_bridge.dylib (macOS)
+
+# Set environment variable (optional, auto-detected if in build/)
+export PX4_PARAM_BRIDGE_LIB=/path/to/MavInject/mav_inject/build/libpx4_param_bridge.so
+```
 
 ## Configuration Files
 
