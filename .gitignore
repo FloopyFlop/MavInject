@@ -36,3 +36,4 @@ build/
 
 # Backups
 config_backups/
+extracted_format/
