@@ -134,9 +134,31 @@ class PX4ConfigInjector(Node):
         self.get_logger().info(f'Using: {"PX4 C API (Direct)" if self.px4_api else "MAVLink Protocol"}')
         self.get_logger().info('='*80)
 
-        # Test 1: Read current parameters
+        # Test 1: Disable Preflight Checks
         self.get_logger().info('')
-        self.get_logger().info('--- Test 1: Read Current Parameters ---')
+        self.get_logger().info('--- Test 1: Disable All Preflight Safety Checks ---')
+
+        # First set INT32 parameters
+        self.get_logger().info('Setting INT32 circuit breakers...')
+        self.set_parameters_int32({
+            'CBRK_SUPPLY_CHK': 894281,    # Disable power supply check
+            'CBRK_USB_CHK': 197848,       # Disable USB check
+            'CBRK_IO_SAFETY': 22027,      # Disable IO safety
+            'CBRK_FLIGHTTERM': 121212,    # Disable flight termination
+        })
+
+        # Then set FLOAT parameters
+        self.get_logger().info('Setting FLOAT arming checks...')
+        self.set_parameters({
+            'COM_ARM_IMU_ACC': 1000.0,    # Disable accel consistency check
+            'COM_ARM_IMU_GYR': 1000.0,    # Disable gyro consistency check
+            'COM_DISARM_PRFLT': -1.0,     # Disable preflight auto-disarm
+        })
+        time.sleep(1.0)
+
+        # Test 1b: Read current parameters
+        self.get_logger().info('')
+        self.get_logger().info('--- Test 1b: Read Current Flight Parameters ---')
         self.read_parameters([
             'MC_ROLL_P',
             'MC_PITCH_P',
@@ -148,55 +170,71 @@ class PX4ConfigInjector(Node):
         ])
         time.sleep(0.5)
 
-        # Test 2: Small Roll P Increase
+        # Test 2: Severely Reduce Rate Gains (Very Sluggish, Unstable)
         self.get_logger().info('')
-        self.get_logger().info('--- Test 2: Small Roll P Increase ---')
-        self.set_parameters({'MC_ROLL_P': 8.0})
-        time.sleep(0.5)
-
-        # Test 3: Small Pitch P Increase
-        self.get_logger().info('')
-        self.get_logger().info('--- Test 3: Small Pitch P Increase ---')
-        self.set_parameters({'MC_PITCH_P': 8.0})
-        time.sleep(0.5)
-
-        # Test 4: Decrease Rate Gains (Sluggish)
-        self.get_logger().info('')
-        self.get_logger().info('--- Test 4: Decrease Rate Gains (Sluggish Response) ---')
+        self.get_logger().info('--- Test 2: SABOTAGE - Severely Reduce Rate Gains ---')
         self.set_parameters({
-            'MC_ROLLRATE_P': 0.08,
-            'MC_PITCHRATE_P': 0.08
+            'MC_ROLLRATE_P': 0.01,
+            'MC_PITCHRATE_P': 0.01,
+            'MC_YAWRATE_P': 0.05
         })
         time.sleep(0.5)
 
-        # Test 5: Asymmetric Roll/Pitch
+        # Test 3: Extreme Asymmetric Roll/Pitch (Causes Heavy Drift)
         self.get_logger().info('')
-        self.get_logger().info('--- Test 5: Asymmetric Roll/Pitch (Causes Drift) ---')
+        self.get_logger().info('--- Test 3: SABOTAGE - Extreme Asymmetric Control ---')
         self.set_parameters({
-            'MC_ROLL_P': 10.0,
-            'MC_PITCH_P': 4.0
+            'MC_ROLL_P': 15.0,
+            'MC_PITCH_P': 2.0
         })
         time.sleep(0.5)
 
-        # Test 6: Position Control Degradation
+        # Test 4: Destroy Position Control
         self.get_logger().info('')
-        self.get_logger().info('--- Test 6: Position Control Degradation ---')
+        self.get_logger().info('--- Test 4: SABOTAGE - Destroy Position Control ---')
         self.set_parameters({
-            'MPC_XY_P': 0.5,
-            'MPC_Z_P': 0.6
+            'MPC_XY_P': 0.1,
+            'MPC_Z_P': 0.1,
+            'MPC_XY_VEL_P_ACC': 0.5,
+            'MPC_Z_VEL_P_ACC': 0.5
+        })
+        time.sleep(0.5)
+
+        # Test 5: Extreme Rate I Terms (Causes Oscillation)
+        self.get_logger().info('')
+        self.get_logger().info('--- Test 5: SABOTAGE - Excessive Integral Gains ---')
+        self.set_parameters({
+            'MC_ROLLRATE_I': 0.5,
+            'MC_PITCHRATE_I': 0.5
+        })
+        time.sleep(0.5)
+
+        # Test 6: Reduce D Terms to Zero (No Damping)
+        self.get_logger().info('')
+        self.get_logger().info('--- Test 6: SABOTAGE - Remove Damping ---')
+        self.set_parameters({
+            'MC_ROLLRATE_D': 0.0,
+            'MC_PITCHRATE_D': 0.0
         })
         time.sleep(0.5)
 
         # Test 7: Read Parameters After Changes
         self.get_logger().info('')
-        self.get_logger().info('--- Test 7: Verify Parameters After All Changes ---')
+        self.get_logger().info('--- Test 7: Verify All Sabotaged Parameters ---')
         self.read_parameters([
             'MC_ROLL_P',
             'MC_PITCH_P',
             'MC_ROLLRATE_P',
             'MC_PITCHRATE_P',
+            'MC_YAWRATE_P',
+            'MC_ROLLRATE_I',
+            'MC_PITCHRATE_I',
+            'MC_ROLLRATE_D',
+            'MC_PITCHRATE_D',
             'MPC_XY_P',
-            'MPC_Z_P'
+            'MPC_Z_P',
+            'MPC_XY_VEL_P_ACC',
+            'MPC_Z_VEL_P_ACC'
         ])
 
         self.get_logger().info('')
@@ -281,6 +319,64 @@ class PX4ConfigInjector(Node):
                     self.get_logger().error(f'Failed to read parameter {param_name}: {e}')
         else:
             self.get_logger().error('No parameter access method available (neither C API nor MAVLink)')
+
+    def set_parameters_int32(self, params):
+        """Set INT32 parameters via MAVLink"""
+        if self.mav:
+            self.get_logger().info('Setting INT32 parameters via MAVLink...')
+            for param_name, value in params.items():
+                try:
+                    param_value = int(value)
+
+                    self.get_logger().info(f'Setting INT32 parameter: {param_name} = {param_value}')
+                    self.get_logger().info(f'  MAVLink call: mav.mav.param_set_send(...)')
+
+                    # Send parameter set command with INT32 type
+                    self.mav.mav.param_set_send(
+                        self.mav.target_system,
+                        self.mav.target_component,
+                        param_name.encode('utf-8'),
+                        float(param_value),  # MAVLink sends as float but with INT32 type flag
+                        mavutil.mavlink.MAV_PARAM_TYPE_INT32
+                    )
+
+                    # Wait for ACK - keep reading until we get the right parameter
+                    self.get_logger().info(f'  Waiting for acknowledgment...')
+                    start_time = time.time()
+                    timeout = 2.0
+                    found = False
+
+                    while (time.time() - start_time) < timeout:
+                        msg = self.mav.recv_match(type='PARAM_VALUE', blocking=True, timeout=0.5)
+                        if msg:
+                            # Handle both bytes and str for param_id (different pymavlink versions)
+                            param_id = msg.param_id
+                            if isinstance(param_id, bytes):
+                                param_id = param_id.decode('utf-8').rstrip('\x00')
+                            elif isinstance(param_id, str):
+                                param_id = param_id.rstrip('\x00')
+
+                            # Check if this is the parameter we set
+                            if param_id == param_name:
+                                new_value = int(msg.param_value)
+                                self.get_logger().info(f'  SUCCESS: {param_id} confirmed at {new_value}')
+
+                                if new_value != param_value:
+                                    self.get_logger().warning(f'  WARNING: Set value {param_value} differs from confirmed {new_value}')
+                                found = True
+                                break
+                            else:
+                                self.get_logger().debug(f'  Skipping unexpected param: {param_id} (waiting for {param_name})')
+
+                    if not found:
+                        self.get_logger().warning(f'  No acknowledgment received for {param_name}')
+
+                except Exception as e:
+                    self.get_logger().error(f'Failed to set INT32 parameter {param_name}: {e}')
+                    import traceback
+                    self.get_logger().error(f'Traceback: {traceback.format_exc()}')
+        else:
+            self.get_logger().error('MAVLink not available for INT32 parameter setting')
 
     def set_parameters(self, params):
         """Set parameters and verify they were set"""
